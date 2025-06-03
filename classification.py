@@ -50,7 +50,7 @@ class TravelTextClassifier:
     Optimized for Android deployment with lightweight CNN architecture
     """
 
-    def __init__(self, max_features=8000, max_length=80, embedding_dim=64):
+    def __init__(self, max_features=8000, max_length=80, embedding_dim=64, dropout_rate=0.3):
         """
         Initialize Travel Text Classifier with mobile-optimized parameters
 
@@ -58,10 +58,12 @@ class TravelTextClassifier:
             max_features (int): Maximum number of words in vocabulary (reduced for mobile)
             max_length (int): Maximum sequence length (reduced for speed)
             embedding_dim (int): Word embedding dimension (reduced for efficiency)
+            dropout_rate (float): Dropout rate for regularization
         """
         self.max_features = max_features
         self.max_length = max_length
         self.embedding_dim = embedding_dim
+        self.dropout_rate = dropout_rate
 
         self.tokenizer = None
         self.model = None
@@ -250,60 +252,21 @@ class TravelTextClassifier:
 
     def build_model(self):
         """
-        Build lightweight CNN model optimized for Android deployment
-        Uses 1D CNN instead of LSTM for better speed and smaller model size
+        Build lightweight Sequential model optimized for Android deployment
+        Uses simple embedding + global average pooling for fast inference
         """
-        logger.info("Building lightweight CNN binary classification model for Android...")
+        logger.info("Building lightweight Sequential binary classification model for Android...")
 
-        # Input layer
-        inputs = Input(shape=(self.max_length,), name='input')
-
-        # Embedding layer (smaller dimension for efficiency)
-        embedding = Embedding(
-            input_dim=self.max_features,
-            output_dim=self.embedding_dim,
-            input_length=self.max_length,
-            mask_zero=False,  # Disable masking for CNN to improve speed
-            name='embedding'
-        )(inputs)
-
-        # Multi-scale CNN layers for different n-gram features
-        # This captures patterns at different scales efficiently
-        conv_layers = []
-
-        # 3-gram features
-        conv1 = Conv1D(64, 3, activation='relu', padding='same', name='conv1d_3gram')(embedding)
-        conv1 = BatchNormalization(name='bn_3gram')(conv1)
-        pool1 = GlobalMaxPooling1D(name='global_max_pool_3gram')(conv1)
-        conv_layers.append(pool1)
-
-        # 4-gram features
-        conv2 = Conv1D(64, 4, activation='relu', padding='same', name='conv1d_4gram')(embedding)
-        conv2 = BatchNormalization(name='bn_4gram')(conv2)
-        pool2 = GlobalMaxPooling1D(name='global_max_pool_4gram')(conv2)
-        conv_layers.append(pool2)
-
-        # 5-gram features
-        conv3 = Conv1D(64, 5, activation='relu', padding='same', name='conv1d_5gram')(embedding)
-        conv3 = BatchNormalization(name='bn_5gram')(conv3)
-        pool3 = GlobalMaxPooling1D(name='global_max_pool_5gram')(conv3)
-        conv_layers.append(pool3)
-
-        # Concatenate all CNN features
-        concatenated = Concatenate(name='concatenate_features')(conv_layers)
-
-        # Dense layers (smaller for mobile efficiency)
-        dense1 = Dense(32, activation='relu', name='dense_1')(concatenated)
-        dropout1 = Dropout(0.3, name='dropout_1')(dense1)  # Reduced dropout for smaller model
-
-        dense2 = Dense(16, activation='relu', name='dense_2')(dropout1)
-        dropout2 = Dropout(0.2, name='dropout_2')(dense2)
-
-        # Binary output layer
-        outputs = Dense(1, activation='sigmoid', name='output')(dropout2)
-
-        # Create the model
-        self.model = Model(inputs=inputs, outputs=outputs, name='travel_cnn_classifier')
+        # Create Sequential model with simplified architecture
+        self.model = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=[self.max_length], dtype=tf.int32),
+            tf.keras.layers.Embedding(
+                self.max_features, self.embedding_dim, input_length=self.max_length),
+            tf.keras.layers.GlobalAveragePooling1D(),
+            tf.keras.layers.Dense(self.embedding_dim, activation=tf.nn.relu),
+            tf.keras.layers.Dropout(self.dropout_rate),
+            tf.keras.layers.Dense(1, activation='sigmoid')  # Binary classification output
+        ], name='travel_sequential_classifier')
 
         # Compile model for binary classification
         self.model.compile(
@@ -317,7 +280,7 @@ class TravelTextClassifier:
 
         # Calculate model size
         model_size = self.model.count_params()
-        logger.info(f"✅ Lightweight CNN model built successfully")
+        logger.info(f"✅ Lightweight Sequential model built successfully")
         logger.info(f"📊 Total parameters: {model_size:,}")
         logger.info(f"🚀 Optimized for Android deployment")
 
@@ -508,7 +471,7 @@ class TravelTextClassifier:
         # Create TFLite converter
         converter = tf.lite.TFLiteConverter.from_keras_model(self.model)
 
-        # CNN is more compatible with TFLite than LSTM
+        # Sequential model with simple layers is highly compatible with TFLite
         converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
 
         # Apply aggressive quantization for mobile
@@ -530,10 +493,10 @@ class TravelTextClassifier:
 
             model_size = os.path.getsize(model_path) / (1024 * 1024)  # MB
 
-            logger.info(f"✅ Travel CNN TFLite model saved to {model_path}")
+            logger.info(f"✅ Travel Sequential TFLite model saved to {model_path}")
             logger.info(f"📁 Model size: {model_size:.2f} MB")
             logger.info("📱 Model ready for Android deployment")
-            logger.info("🚀 CNN architecture provides faster inference than LSTM")
+            logger.info("🚀 Sequential architecture provides fast and efficient inference")
 
             return model_path
 
@@ -562,16 +525,17 @@ class TravelTextClassifier:
             'max_features': self.max_features,
             'max_length': self.max_length,
             'embedding_dim': self.embedding_dim,
-            'model_type': 'binary_classification_cnn',
-            'architecture': 'Multi-scale CNN with Global Max Pooling',
+            'dropout_rate': self.dropout_rate,
+            'model_type': 'binary_classification_sequential',
+            'architecture': 'Embedding + GlobalAveragePooling1D + Dense',
             'classes': ['non_booking', 'booking'],
             'output_description': 'Returns 0 for non-booking, 1 for booking-related text',
             'optimized_for': 'Android deployment',
             'features': [
-                'Lightweight CNN architecture',
-                'Multi-scale n-gram features (3,4,5)',
-                'Global max pooling for efficiency',
-                'Reduced parameters for mobile',
+                'Lightweight Sequential architecture',
+                'Global average pooling for text representation',
+                'Simple dense layers with dropout',
+                'Minimal parameters for mobile',
                 'Fast inference speed'
             ]
         }
@@ -590,8 +554,8 @@ def main():
     # Configuration - optimized for Android deployment
     UNRELATED_CSV_PATH = '/Users/jinze/agent_classification/unrelated_dataset/unrelated_text_part_1.csv'
     TRAVEL_TXT_PATH = '/Users/jinze/agent_classification/travel_confirmations.txt'
-    EPOCHS = 20  # Reduced for faster training
-    BATCH_SIZE = 64  # Increased for efficiency
+    EPOCHS = 10  # Reduced for faster training
+    BATCH_SIZE = 256  # Increased for efficiency
     TEST_SIZE = 0.2
     VAL_SIZE = 0.2
 
@@ -602,7 +566,7 @@ def main():
         # Initialize travel text classifier with mobile-optimized parameters
         classifier = TravelTextClassifier(
             max_features=8000,  # Reduced vocabulary for smaller model
-            max_length=80,      # Shorter sequences for faster processing
+            max_length=300,      # Shorter sequences for faster processing
             embedding_dim=64    # Smaller embeddings for efficiency
         )
 
@@ -675,12 +639,12 @@ def main():
         print("OPTIMIZED MOBILE MODEL SUMMARY")
         print("="*80)
         print("📋 Task: Binary classification (booking vs non-booking)")
-        print("🏗️ Architecture: Lightweight Multi-scale CNN")
+        print("🏗️ Architecture: Lightweight Sequential Model")
         print("🎯 Output: 0 (non-booking) or 1 (booking)")
         print("📱 Target: Flight, car rental, hotel bookings")
         print("⚖️ Data: Balanced dataset (10k samples per class)")
         print("⚡ Features: Fast inference, small model size, high accuracy")
-        print("🚀 Optimizations: Reduced params, CNN vs LSTM, efficient pooling, balanced training")
+        print("🚀 Optimizations: Simple architecture, global avg pooling, minimal params, balanced training")
 
     except Exception as e:
         logger.error(f"Error in travel classification pipeline: {str(e)}")
@@ -697,7 +661,7 @@ if __name__ == "__main__":
     print(f"TensorFlow version: {tf.__version__}")
     print("Task: Binary classification (booking vs non-booking)")
     print("Output: 0 (non-booking) or 1 (booking)")
-    print("Architecture: Lightweight CNN for mobile deployment")
+    print("Architecture: Lightweight Sequential model for mobile deployment")
 
     print("=" * 80)
     print("STARTING MOBILE-OPTIMIZED TRAINING PIPELINE")

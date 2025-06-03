@@ -1,9 +1,10 @@
 {
   "max_features": 8000,
-  "max_length": 80,
+  "max_length": 300,
   "embedding_dim": 64,
-  "model_type": "binary_classification_cnn",
-  "architecture": "Multi-scale CNN with Global Max Pooling",
+  "dropout_rate": 0.3,
+  "model_type": "binary_classification_sequential",
+  "architecture": "Embedding + GlobalAveragePooling1D + Dense",
   "classes": [
     "non_booking",
     "booking"
@@ -11,10 +12,10 @@
   "output_description": "Returns 0 for non-booking, 1 for booking-related text",
   "optimized_for": "Android deployment",
   "features": [
-    "Lightweight CNN architecture",
-    "Multi-scale n-gram features (3,4,5)",
-    "Global max pooling for efficiency",
-    "Reduced parameters for mobile",
+    "Lightweight Sequential architecture",
+    "Global average pooling for text representation",
+    "Simple dense layers with dropout",
+    "Minimal parameters for mobile",
     "Fast inference speed"
   ]
 }
